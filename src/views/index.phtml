@@ -1,0 +1,147 @@
+<?php include '_header.phtml'; ?>
+<script>
+    var REFRESH_TIME = 30*1000;
+    var ALERTING = false;   // notice the user that someone change the git
+    var LAST_REPO = null;
+    var REPOS = {};
+<?php foreach ($repos as $repo_key => $repo) {
+    $repo_data = array(
+        'title' => $repo['title'],
+        'current_branch' => $repo['info']['current_branch'],
+        'current_commit' => $repo['info']['current_commit']['commit'],
+        'new_branch' => $repo['info']['current_branch'],
+        'total_remote_branches' => count($repo['info']['remote_branches']),
+        'updating' => false,
+        'last_check' => $repo['info']['last_check']
+    );
+    echo "\tREPOS." . $repo['key'] . ' = ' . json_encode($repo_data) . ";\n";
+
+}?>
+</script>
+<nav class="navbar navbar-inverse navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar" aria-expanded="false" aria-controls="navbar">
+        <span class="sr-only">Toggle navigation</span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="/git">GIT Manager</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <div class="navbar-brand navbar-right" role="form" style="font-size: 1em;">
+        <span style="color: white;">Welcome <?echo $email; ?>. </span>
+        <span><a href="/git?logout=1">Logout</a></span>
+      </form>
+    </div><!--/.navbar-collapse -->
+  </div>
+</nav>
+<?php //var_dump($repos); ?>
+<div class="container-fluid" style="margin: 30px 0px;">
+	<div class="row">
+		<div class="col-md-12">
+			<h3>
+				Your GIT repositories
+			</h3>
+			<div class="alert alert-success alert-dismissable" style="display: none;">
+				<button type="button" class="close" aria-hidden="true" onclick="$(this).parent().hide();">
+					×
+				</button>
+				<strong>Oops!</strong> <span id="error_msg"></span>>
+			</div>
+			<table class="table table-striped">
+				<thead>
+					<tr>
+						<th>#</th>
+						<th>Repo</th>
+						<th>Current Branch</th>
+                        <th style="width: 40%;">Current Commit</th>
+						<th>Branches</th>
+                        <th>Actions</th>
+					</tr>
+				</thead>
+				<tbody>
+                <?php
+                $i = 1;
+                foreach ($repos as $repo) {
+                    $is_not_branch = strpos($repo['info']['current_branch'], '(HEAD ') === 0;
+
+                ?>
+					<tr>
+						<td><?echo $i++;?></td>
+						<td><?echo $repo['title']; ?></td>
+						<td>
+                            <a href="#" id="crr-branch__<?echo $repo['key']; ?>" onclick="resetBranch('<?echo $repo['key']; ?>', '<?echo $repo['info']['current_branch']; ?>'); return false;"><?echo $repo['info']['current_branch']; ?></a>
+                        </td>
+                        <td id="crr-commit__<?echo $repo['key']; ?>">
+                        <?php if ($repo['info']['current_commit']) {
+                        foreach ($repo['info']['current_commit'] as $k => $v) {
+                        ?>
+                            <div class="row">
+                                <label class="col-sm-2 control-label text-right"><?echo ucfirst($k); ?></label>
+                                <div class="col-sm-10" style="word-wrap:break-word;"><?echo $v; ?></div>
+                            </div>
+                        <?php }
+                        } ?>
+                        </td>
+						<td>
+                            <select onchange="selectBranch('<?echo $repo['key']; ?>', this.value)" id="opt-branch__<?echo $repo['key']; ?>">
+                            <?php if ($is_not_branch) { ?>
+                                <option value="<?echo $repo['info']['current_branch']; ?>"><?echo $repo['info']['current_branch']; ?></option>
+                                <option disabled> --------- </option>
+                            <?php } ?>
+                            <?php
+                            foreach ($repo['info']['remote_branches'] as $bname) {
+                            ?>
+                                <option value="<?echo $bname; ?>" <?echo ($bname == $repo['info']['current_branch']) ? 'selected' : ''; ?>><?echo $bname; ?></option>
+                            <?php } ?>
+                            </select>
+                        </td>
+                        <td>
+                        <?php if (hasPerm($repo['key'], GIT_FETCH)) { ?>
+                            <button type="button" class="btn btn-default" id="btn__<?echo $repo['key']; ?>__fetch" onclick="gitFetch('<?echo $repo['key']; ?>')">Fetch</button>
+                        <?php } ?>
+                        <?php if (hasPerm($repo['key'], GIT_PULL)) { ?>
+                            <button type="button" class="btn btn-default" id="btn__<?echo $repo['key']; ?>__pull" onclick="gitPull('<?echo $repo['key']; ?>')">Pull</button>
+                        <?php } ?>
+                        <?php if (hasPerm($repo['key'], GIT_CHECKOUT)) { ?>
+                            <button type="button" class="btn btn-default" id="btn__<?echo $repo['key']; ?>__checkout" onclick="gitCheckout('<?echo $repo['key']; ?>')" style="display: none;">Checkout</button>
+                        <?php } ?>
+                        <?php if (hasPerm($repo['key'], GIT_CHECKOUT) && hasPerm($repo['key'], GIT_PULL)) { ?>
+                            <button type="button" class="btn btn-default" id="btn__<?echo $repo['key']; ?>__checkout_pull" onclick="gitCheckoutPull('<?echo $repo['key']; ?>')" style="display: none;">Checkout & Pull</button>
+                        <?php } ?>
+
+                            <button type="button" class="btn btn-default" id="btn__<?echo $repo['key']; ?>__gitting" style="display: none;"></button>
+                        </td>
+					</tr>
+                <?php } ?>
+				</tbody>
+			</table>
+		</div>
+	</div>
+    <hr>
+
+    <footer>
+        <p>&copy; DEV System</p>
+    </footer>
+</div>
+
+<div class="modal fade" id="modal-output" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true"> × </button>
+                <h4 class="modal-title" id="myModalLabel">[<span></span>] Command Output</h4>
+            </div>
+            <div class="modal-body"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+<?php include '_footer.phtml'; ?>
